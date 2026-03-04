@@ -280,6 +280,7 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
   text-transform: uppercase;
   letter-spacing: 0;
+  overflow:        hidden;
 }
 
 .sidebar__user {
@@ -630,6 +631,79 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.88rem;
 }
 
+/* ── Messages panel ───────────────────────────── */
+.msg-card {
+  background:    var(--bg-alt);
+  border:        1px solid var(--border);
+  border-radius: 10px;
+  padding:       1.25rem 1.5rem;
+  margin-bottom: 0.85rem;
+  transition:    border-color 0.2s;
+}
+.msg-card--unread {
+  border-color: rgba(201,168,76,0.4);
+  background:   rgba(201,168,76,0.04);
+}
+
+.msg-card__header {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     flex-start;
+  gap:             1rem;
+  margin-bottom:   0.6rem;
+}
+.msg-card__from {
+  display:     flex;
+  align-items: center;
+  gap:         0.5rem;
+  flex-wrap:   wrap;
+}
+.msg-unread-dot {
+  width:         8px;
+  height:        8px;
+  border-radius: 50%;
+  background:    var(--gold);
+  flex-shrink:   0;
+}
+.msg-meta {
+  font-size: 0.82rem;
+  color:     var(--muted);
+}
+.msg-date {
+  font-size:  0.78rem;
+  color:      var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.msg-body {
+  font-size:   0.9rem;
+  line-height: 1.65;
+  color:       var(--text);
+  white-space: pre-wrap;
+  margin:      0.5rem 0 0.9rem;
+}
+.msg-actions {
+  display: flex;
+  gap:     0.5rem;
+}
+
+/* Unread count badge on sidebar Messages link */
+.msg-unread-badge {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  min-width:       18px;
+  height:          18px;
+  padding:         0 5px;
+  border-radius:   100px;
+  background:      var(--gold);
+  color:           #0f0e0d;
+  font-size:       0.65rem;
+  font-weight:     700;
+  margin-left:     auto;
+  line-height:     1;
+}
+
 /* ── Buttons ─────────────────────────────────── */
 .btn-gold {
   background: var(--gold);
@@ -737,8 +811,31 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.08em;
   border: 1px solid transparent;
 }
-.role-badge--admin   { background: var(--gold-dim); color: var(--gold); border-color: rgba(201,168,76,0.25); }
-.role-badge--manager { background: rgba(154,144,136,0.1); color: var(--muted); border-color: rgba(154,144,136,0.2); }
+.role-badge--admin { background: var(--gold-dim); color: var(--gold); border-color: rgba(201,168,76,0.25); }
+/* all other role badge colors are applied as inline styles by roleBadgeStyle() in admin.js */
+
+/* ── Role color swatch picker ────────────────── */
+.color-swatch-wrap {
+  display:     flex;
+  align-items: center;
+}
+
+.color-swatch {
+  -webkit-appearance: none;
+  appearance:    none;
+  width:         36px;
+  height:        26px;
+  padding:       2px;
+  border-radius: 6px;
+  border:        1px solid var(--border-lt);
+  background:    none;
+  cursor:        pointer;
+  transition:    border-color 0.15s;
+}
+.color-swatch:hover         { border-color: var(--gold); }
+.color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.color-swatch::-webkit-color-swatch         { border-radius: 4px; border: none; }
+.color-swatch::-moz-color-swatch            { border-radius: 4px; border: none; }
 
 /* ── User status badges ───────────────────────── */
 .badge--active   { background: rgba(46,204,113,0.08); color: #2ecc71; border-color: rgba(46,204,113,0.2); }
@@ -832,6 +929,54 @@ a { color: inherit; text-decoration: none; }
   gap: 0.75rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.modal-actions--center {
+  justify-content: center;
+  border-top: none;
+  padding-top: 0;
+}
+
+/* ── Confirm modal ───────────────────────────── */
+#confirmModal {
+  z-index: 200;
+}
+
+.modal-card--confirm {
+  max-width:   380px;
+  text-align:  center;
+  padding:     2.5rem 2.25rem 2rem;
+}
+
+.confirm-icon {
+  display:         inline-flex;
+  width:           60px;
+  height:          60px;
+  border-radius:   50%;
+  align-items:     center;
+  justify-content: center;
+  font-size:       1.7rem;
+  font-weight:     800;
+  margin-bottom:   1.25rem;
+}
+
+.confirm-icon--danger {
+  background: rgba(239,68,68,0.1);
+  color:      #ef4444;
+  border:     2px solid rgba(239,68,68,0.25);
+}
+
+.confirm-icon--warning {
+  background: rgba(201,168,76,0.1);
+  color:      var(--gold);
+  border:     2px solid rgba(201,168,76,0.25);
+}
+
+.confirm-message {
+  font-size:     0.88rem;
+  color:         var(--muted);
+  line-height:   1.65;
+  margin-bottom: 1.75rem;
 }
 
 /* ── Menu selector ───────────────────────────── */
@@ -1096,4 +1241,224 @@ a { color: inherit; text-decoration: none; }
 
   .admin-main { margin-left: 0; padding: 1.5rem 1.25rem; }
   .add-form__grid { grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+}
+
+/* ── Panel access levels ──────────────────────── */
+.panel--hidden { display: none !important; }
+
+.panel--readonly .btn-gold,
+.panel--readonly .btn-ghost,
+.panel--readonly input,
+.panel--readonly textarea,
+.panel--readonly select:not(.perm-select),
+.panel--readonly button:not(.cat-tab):not(.sidebar__link) {
+  pointer-events: none;
+  opacity: 0.45;
+}
+.panel--readonly .add-form { display: none !important; }
+.panel--readonly .menu-add-item-row { display: none !important; }
+
+/* ── Roles panel ──────────────────────────────── */
+.role-desc-cell {
+  color:        var(--muted);
+  font-size:    0.88rem;
+}
+
+/* Manage User modal */
+.modal-card--manage {
+  width:     min(640px, 96vw);
+  max-width: none;
+}
+
+.manage-modal-header {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     flex-start;
+  margin-bottom:   1.25rem;
+}
+
+.manage-close-btn {
+  background:  none;
+  border:      none;
+  color:       var(--muted);
+  font-size:   1.1rem;
+  cursor:      pointer;
+  padding:     0.2rem 0.4rem;
+  line-height: 1;
+  transition:  color 0.15s;
+}
+.manage-close-btn:hover { color: var(--text); }
+
+.manage-danger-zone {
+  border-top:  1px solid rgba(201,168,76,0.15);
+  padding-top: 1.25rem;
+  margin-top:  0.5rem;
+}
+
+.manage-danger-label {
+  display:        block;
+  font-size:      0.7rem;
+  font-weight:    600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color:          var(--muted);
+  margin-bottom:  0.85rem;
+}
+
+.manage-danger-row {
+  display:     flex;
+  gap:         0.75rem;
+  flex-wrap:   wrap;
+  align-items: flex-start;
+}
+
+.manage-reset-pw-wrap {
+  display:        flex;
+  flex-direction: column;
+  gap:            0.5rem;
+}
+
+.manage-reset-pw-form {
+  display:     flex;
+  gap:         0.5rem;
+  align-items: center;
+}
+
+.manage-reset-pw-form input {
+  width:      160px;
+  font-size:  0.83rem;
+  padding:    0.3rem 0.6rem;
+  background: var(--bg);
+  border:     1px solid var(--border-lt);
+  border-radius: 6px;
+  color:      var(--text);
+}
+
+/* Edit-permissions modal */
+.modal-card--wide {
+  width:     min(560px, 94vw);
+  max-width: none;
+}
+
+.role-perms-grid {
+  display:        flex;
+  flex-direction: column;
+  gap:            0.6rem;
+  margin:         1.25rem 0;
+}
+
+.role-perm-row {
+  display:         grid;
+  grid-template-columns: 1fr auto;
+  align-items:     center;
+  gap:             1rem;
+  padding:         0.55rem 0.75rem;
+  background:      var(--surface);
+  border-radius:   var(--radius-sm);
+}
+
+.role-perm-label {
+  font-size:   0.9rem;
+  color:       var(--text);
+  font-weight: 500;
+}
+
+.role-perm-options {
+  display: flex;
+  gap:     0.4rem;
+}
+
+.perm-radio {
+  display:     flex;
+  align-items: center;
+  cursor:      pointer;
+}
+
+.perm-radio input[type="radio"] {
+  display: none;
+}
+
+.perm-radio span {
+  padding:       0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border:        1px solid var(--border-lt);
+  font-size:     0.8rem;
+  color:         var(--muted);
+  background:    var(--surface2);
+  transition:    all 0.15s;
+  user-select:   none;
+}
+
+.perm-radio input[type="radio"]:checked + span {
+  background:   var(--gold-dim);
+  border-color: var(--gold);
+  color:        var(--gold-lt);
+  font-weight:  600;
+}
+
+.perm-radio:hover span {
+  border-color: var(--border-lt);
+  color:        var(--text);
+}
+
+/* ── Profile Modal ────────────────────────────── */
+.profile-modal-body {
+  display:        flex;
+  flex-direction: column;
+  gap:            1.25rem;
+  margin:         1rem 0;
+}
+
+.profile-avatar-wrap {
+  display:     flex;
+  align-items: center;
+  gap:         1.25rem;
+}
+
+.profile-avatar-preview {
+  position:         relative;
+  width:            72px;
+  height:           72px;
+  border-radius:    50%;
+  background:       var(--gold-dim);
+  border:           2px solid rgba(201, 168, 76, 0.35);
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  flex-shrink:      0;
+  overflow:         hidden;
+  background-size:  cover;
+  background-position: center;
+}
+
+.profile-avatar-preview::after {
+  content:     attr(data-initials);
+  font-size:   1.5rem;
+  font-weight: 700;
+  color:       var(--gold);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.profile-upload-overlay {
+  position:    absolute;
+  inset:       0;
+  display:     flex;
+  align-items: center;
+  justify-content: center;
+  background:  rgba(0,0,0,0.45);
+  border-radius: 50%;
+  cursor:      pointer;
+  font-size:   1.4rem;
+  transition:  opacity 0.2s;
+  opacity:     0;
+}
+.profile-avatar-preview:hover .profile-upload-overlay {
+  opacity: 1 !important;
+}
+
+.profile-fields-grid {
+  display:               grid;
+  grid-template-columns: 1fr 1fr;
+  gap:                   0.85rem;
 }

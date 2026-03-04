@@ -53,6 +53,51 @@ const app = express();
     writeData(data);
     console.log('✓ Migrated to multi-menu system.');
   }
+
+  // ── User profile fields migration ────────────────────────────────────────
+  const dataP = readData();
+  let profileMigrated = false;
+  (dataP.users || []).forEach(u => {
+    if (u.firstName     === undefined) { u.firstName     = ''; profileMigrated = true; }
+    if (u.lastName      === undefined) { u.lastName      = ''; profileMigrated = true; }
+    if (u.phone         === undefined) { u.phone         = ''; profileMigrated = true; }
+    if (u.profilePicture === undefined) { u.profilePicture = ''; profileMigrated = true; }
+  });
+  if (profileMigrated) { writeData(dataP); console.log('✓ User profile fields added.'); }
+
+  // ── Roles migration ───────────────────────────────────────────────────────
+  const data2 = readData();
+  if (!data2.roles) {
+    data2.roles = [{
+      id:          1,
+      name:        'manager',
+      description: 'Restaurant manager with limited admin access',
+      color:       '#7b8fa1',
+      permissions: {
+        menu: 'full', hours: 'full',
+        settings: 'view', about: 'view',
+        users: 'hidden', roles: 'hidden',
+        messages: 'view'
+      }
+    }];
+    writeData(data2);
+    console.log('✓ Roles system initialised.');
+  } else {
+    // Add color field to any existing roles that don't have one
+    let roleMigrated = false;
+    (data2.roles || []).forEach(r => {
+      if (r.color === undefined) { r.color = '#9a9088'; roleMigrated = true; }
+    });
+    if (roleMigrated) { writeData(data2); console.log('✓ Role fields migrated.'); }
+  }
+
+  // ── Messages migration ────────────────────────────────────────────────────
+  const data3 = readData();
+  if (!data3.messages) {
+    data3.messages = [];
+    writeData(data3);
+    console.log('✓ Messages system initialised.');
+  }
 })();
 
 // ── Middleware ──────────────────────────────────────────────────────────────

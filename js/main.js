@@ -44,26 +44,34 @@ updateActiveNav();
 
 // ── Menu tabs (built dynamically by renderMenu) ────────────────────────────
 
-// ── Reservation form ──────────────────────────
-const dateInput = document.getElementById('date');
-if (dateInput) {
-  dateInput.setAttribute('min', new Date().toISOString().split('T')[0]);
-}
-
-const form = document.getElementById('reservationForm');
-if (form) {
-  form.addEventListener('submit', (e) => {
+// ── Contact form ───────────────────────────────
+const contactForm = document.getElementById('contactForm');
+if (contactForm) {
+  contactForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    form.innerHTML = `
-      <div class="form__success" style="display:block">
-        <p style="font-size:2rem; margin-bottom:0.5rem;">&#10003;</p>
-        <p><strong>Reservation request received!</strong></p>
-        <p style="margin-top:0.5rem; color: var(--color-muted); font-size:0.95rem;">
-          We'll confirm your table by email within 24 hours.<br/>
-          We look forward to seeing you!
-        </p>
-      </div>
-    `;
+    const btn  = contactForm.querySelector('button[type="submit"]');
+    const note = document.getElementById('contactNote');
+    btn.disabled    = true;
+    btn.textContent = 'Sending…';
+    note.textContent = '';
+
+    const fd  = new FormData(contactForm);
+    const res = await fetch('/api/contact', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(Object.fromEntries(fd))
+    });
+
+    if (res.ok) {
+      note.style.color = 'var(--color-gold)';
+      note.textContent = '✓ Message sent! We\'ll be in touch soon.';
+      contactForm.reset();
+    } else {
+      note.style.color = '#ef4444';
+      note.textContent = 'Something went wrong. Please try again.';
+    }
+    btn.disabled    = false;
+    btn.textContent = 'Send Message';
   });
 }
 

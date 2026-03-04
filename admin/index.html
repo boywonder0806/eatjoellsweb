@@ -21,22 +21,29 @@
 
       <nav class="sidebar__nav">
         <span class="sidebar__section">Content</span>
-        <button class="sidebar__link active" data-panel="menu">
+        <button class="sidebar__link active" data-panel="menu" data-permission-panel="menu">
           <i class="nav-icon">&#9776;</i> Menu Items
         </button>
-        <button class="sidebar__link" data-panel="hours">
+        <button class="sidebar__link" data-panel="hours" data-permission-panel="hours">
           <i class="nav-icon">&#9201;</i> Hours
         </button>
-        <button class="sidebar__link" data-panel="settings" data-admin-only>
+        <button class="sidebar__link" data-panel="settings" data-permission-panel="settings">
           <i class="nav-icon">&#9881;</i> Settings
         </button>
-        <button class="sidebar__link" data-panel="about" data-admin-only>
+        <button class="sidebar__link" data-panel="about" data-permission-panel="about">
           <i class="nav-icon">&#9998;</i> About Page
         </button>
+        <button class="sidebar__link" data-panel="messages" data-permission-panel="messages">
+          <i class="nav-icon">&#9993;</i> Messages
+          <span class="msg-unread-badge hidden" id="unreadBadge"></span>
+        </button>
 
-        <span class="sidebar__section" style="margin-top:0.5rem">Admin</span>
-        <button class="sidebar__link" data-panel="users" data-admin-only>
+        <span class="sidebar__section" id="sidebarAdminSection" style="margin-top:0.5rem">Admin</span>
+        <button class="sidebar__link" data-panel="users" data-permission-panel="users">
           <i class="nav-icon">&#128101;</i> Users
+        </button>
+        <button class="sidebar__link" data-panel="roles" data-permission-panel="roles">
+          <i class="nav-icon">&#128273;</i> Roles
         </button>
       </nav>
 
@@ -48,6 +55,7 @@
             <span class="role-badge role-badge--admin" id="roleBadge">Admin</span>
           </div>
         </div>
+        <button class="sidebar__change-pw" id="profileBtn">Profile settings</button>
         <button class="sidebar__change-pw" id="changePwBtn">Change password</button>
         <button class="sidebar__logout" id="logoutBtn">Sign out</button>
       </div>
@@ -253,6 +261,20 @@
         </div>
       </section>
 
+      <!-- ── MESSAGES PANEL ───────────────────── -->
+      <section class="panel" id="panel-messages">
+        <div class="panel__header">
+          <div>
+            <span class="panel__eyebrow">Inbox</span>
+            <h1 class="panel__title">Messages</h1>
+            <p class="panel__sub">Contact form submissions from the public site.</p>
+          </div>
+          <span class="save-msg" id="messagesMsg"></span>
+        </div>
+        <div id="messagesList"></div>
+        <p class="empty-state hidden" id="messagesEmpty">No messages yet.</p>
+      </section>
+
       <!-- ── USERS PANEL ──────────────────────── -->
       <section class="panel" id="panel-users">
         <div class="panel__header">
@@ -301,16 +323,65 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Username</th>
+                <th>Full Name</th>
                 <th>Email</th>
                 <th style="width:110px">Role</th>
                 <th style="width:100px">Status</th>
-                <th style="width:200px">Actions</th>
+                <th style="width:100px"></th>
               </tr>
             </thead>
             <tbody id="usersTbody"></tbody>
           </table>
           <p class="empty-state hidden" id="usersEmpty">No users found.</p>
+        </div>
+      </section>
+
+      <!-- ── ROLES PANEL ───────────────────────── -->
+      <section class="panel" id="panel-roles">
+        <div class="panel__header">
+          <div>
+            <span class="panel__eyebrow">Manage</span>
+            <h1 class="panel__title">Roles &amp; Permissions</h1>
+            <p class="panel__sub">Define roles and control which panels each role can access.</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <span class="save-msg" id="rolesMsg"></span>
+            <button class="btn-gold" id="addRoleBtn">+ Add Role</button>
+          </div>
+        </div>
+
+        <!-- Add role form -->
+        <form class="add-form hidden" id="addRoleForm">
+          <span class="add-form__label">New Role</span>
+          <div class="add-form__grid" style="grid-template-columns:1fr 2fr">
+            <div class="field">
+              <label>Role Name</label>
+              <input type="text" name="name" placeholder="e.g. chef" required />
+            </div>
+            <div class="field">
+              <label>Description</label>
+              <input type="text" name="description" placeholder="Brief description of this role" />
+            </div>
+          </div>
+          <div class="add-form__actions">
+            <button type="submit" class="btn-gold">Create Role</button>
+            <button type="button" class="btn-ghost" id="cancelAddRoleBtn">Cancel</button>
+          </div>
+        </form>
+
+        <div class="table-wrap">
+          <table class="data-table" id="rolesTable">
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Description</th>
+                <th style="width:110px">Tag Color</th>
+                <th style="width:130px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rolesTbody"></tbody>
+          </table>
+          <p class="empty-state hidden" id="rolesEmpty">No custom roles yet.</p>
         </div>
       </section>
 
@@ -337,6 +408,151 @@
           <button type="button" class="btn-ghost" id="changePwCancel">Cancel</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ── Confirm Modal ────────────────────────── -->
+  <div class="modal-overlay hidden" id="confirmModal">
+    <div class="modal-card modal-card--confirm">
+      <div class="confirm-icon" id="confirmIcon"></div>
+      <h2 class="modal-title" id="confirmTitle"></h2>
+      <p class="confirm-message" id="confirmMessage"></p>
+      <div class="modal-actions modal-actions--center">
+        <button class="btn-ghost" id="confirmCancelBtn">Cancel</button>
+        <button id="confirmOkBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Profile Modal ────────────────────────── -->
+  <div class="modal-overlay hidden" id="profileModal">
+    <div class="modal-card modal-card--wide">
+      <h2 class="modal-title">Profile Settings</h2>
+      <div class="profile-modal-body">
+        <div class="profile-avatar-wrap">
+          <div class="profile-avatar-preview" id="profileAvatarPreview">
+            <label class="profile-upload-overlay" for="profilePictureFile" title="Upload photo">
+              <span>&#128247;</span>
+            </label>
+          </div>
+          <div>
+            <input type="file" id="profilePictureFile" accept="image/*" style="display:none" />
+            <button type="button" class="btn-ghost btn-sm" onclick="document.getElementById('profilePictureFile').click()">Upload Photo</button>
+            <button type="button" class="btn-ghost btn-sm" id="profilePicRemoveBtn" style="margin-top:0.4rem;display:none">Remove Photo</button>
+          </div>
+        </div>
+        <div class="profile-fields-grid">
+          <div class="field">
+            <label>First Name</label>
+            <input type="text" id="profileFirstName" placeholder="First name" />
+          </div>
+          <div class="field">
+            <label>Last Name</label>
+            <input type="text" id="profileLastName" placeholder="Last name" />
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="profileEmail" placeholder="email@example.com" />
+          </div>
+          <div class="field">
+            <label>Phone</label>
+            <input type="tel" id="profilePhone" placeholder="(555) 123-4567" />
+          </div>
+        </div>
+      </div>
+      <p class="modal-error" id="profileError"></p>
+      <div class="modal-actions">
+        <button class="btn-gold" id="profileSaveBtn">Save Changes</button>
+        <button class="btn-ghost" id="profileCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Manage User Modal ────────────────────── -->
+  <div class="modal-overlay hidden" id="manageUserModal">
+    <div class="modal-card modal-card--manage">
+      <div class="manage-modal-header">
+        <div>
+          <h2 class="modal-title" id="manageUserTitle">Manage User</h2>
+          <p class="modal-sub" id="manageUserSub"></p>
+        </div>
+        <button class="manage-close-btn" id="manageUserCloseBtn">&#x2715;</button>
+      </div>
+
+      <div class="profile-avatar-wrap">
+        <div class="profile-avatar-preview" id="manageAvatarPreview">
+          <label class="profile-upload-overlay" for="manageProfilePictureFile" title="Upload photo">
+            <span>&#128247;</span>
+          </label>
+        </div>
+        <div>
+          <input type="file" id="manageProfilePictureFile" accept="image/*" style="display:none" />
+          <button type="button" class="btn-ghost btn-sm" onclick="document.getElementById('manageProfilePictureFile').click()">Upload Photo</button>
+          <button type="button" class="btn-ghost btn-sm" id="managePicRemoveBtn" style="margin-top:0.4rem;display:none">Remove Photo</button>
+        </div>
+      </div>
+
+      <div class="profile-fields-grid" style="margin:1.25rem 0">
+        <div class="field">
+          <label>First Name</label>
+          <input type="text" id="manageFirstName" placeholder="First name" />
+        </div>
+        <div class="field">
+          <label>Last Name</label>
+          <input type="text" id="manageLastName" placeholder="Last name" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="manageEmail" />
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="tel" id="managePhone" placeholder="(555) 123-4567" />
+        </div>
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="manageUsername" />
+        </div>
+        <div class="field">
+          <label>Role</label>
+          <select id="manageRole"></select>
+        </div>
+      </div>
+
+      <div class="manage-danger-zone">
+        <span class="manage-danger-label">Account Actions</span>
+        <div class="manage-danger-row">
+          <div class="manage-reset-pw-wrap">
+            <button class="btn-ghost btn-sm" id="manageResetPwToggle">Reset Password</button>
+            <div class="manage-reset-pw-form hidden" id="manageResetPwForm">
+              <input type="text" id="manageTempPw" placeholder="Temporary password" />
+              <button class="btn-ghost btn-sm" id="manageResetPwSubmit">Set</button>
+            </div>
+          </div>
+          <button class="btn-ghost btn-sm" id="manageLockBtn">Lock Account</button>
+          <button class="btn-ghost btn-sm btn-ghost--danger" id="manageDeleteBtn">Delete Account</button>
+        </div>
+      </div>
+
+      <p class="modal-error" id="manageUserError"></p>
+      <div class="modal-actions">
+        <button class="btn-gold" id="manageUserSaveBtn">Save Changes</button>
+        <button class="btn-ghost" id="manageUserCancelBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Role Permissions Modal ──────────── -->
+  <div class="modal-overlay hidden" id="editRoleModal">
+    <div class="modal-card modal-card--wide">
+      <h2 class="modal-title" id="editRoleModalTitle">Edit Permissions</h2>
+      <p class="modal-sub" id="editRoleModalSub"></p>
+      <div class="role-perms-grid" id="editRolePermsGrid"></div>
+      <p class="modal-error" id="editRoleError"></p>
+      <div class="modal-actions">
+        <button class="btn-gold" id="editRoleSaveBtn">Save Changes</button>
+        <button class="btn-ghost" id="editRoleCancelBtn">Cancel</button>
+      </div>
     </div>
   </div>
 

@@ -1,6 +1,6 @@
 const express = require('express');
 const router  = express.Router();
-const { readData } = require('../db/store');
+const { readData, writeData, getNextId } = require('../db/store');
 
 // GET /api/menu — active menu items grouped by category
 router.get('/menu', (req, res) => {
@@ -34,6 +34,27 @@ router.get('/about', (_req, res) => {
     about_page: data.about_page || {},
     team: (data.team || []).sort((a, b) => a.sort_order - b.sort_order)
   });
+});
+
+// POST /api/contact
+router.post('/contact', (req, res) => {
+  const { name, email, phone, message } = req.body;
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'Name, email, and message are required' });
+  }
+  const data = readData();
+  data.messages = data.messages || [];
+  data.messages.push({
+    id:        getNextId(data.messages),
+    name:      name.trim(),
+    email:     email.trim(),
+    phone:     (phone || '').trim(),
+    message:   message.trim(),
+    read:      false,
+    createdAt: new Date().toISOString()
+  });
+  writeData(data);
+  res.json({ success: true });
 });
 
 module.exports = router;

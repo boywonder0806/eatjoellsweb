@@ -62,38 +62,46 @@
       "blurb": "Daniel's encyclopedic knowledge of wine and spirits elevates every meal at Joelle's Lounge. He curates our cellar with a careful hand, selecting bottles that complement the menu and suit every palate — whether you're a seasoned connoisseur or simply curious to explore.",
       "image_url": "",
       "sort_order": 3
+    },
+    {
+      "id": 5,
+      "name": "Test boy",
+      "role": "The Admin",
+      "blurb": "He is the admin of the web, he love to eat.",
+      "image_url": "",
+      "sort_order": 4
     }
   ],
   "users": [
     {
       "id": 1,
       "username": "admin",
-      "email": "admin@joelleslounge.com",
+      "email": "admin@eatjoelles.com",
       "role": "admin",
       "passwordHash": "$2a$10$MAFWkuIKfHkawfHzai8byuxnqKQHTpcz1cW08R2OebxdgEfbnMw9a",
       "active": true,
       "mustChangePassword": false,
-      "createdAt": "2026-03-03T19:14:40.532Z"
+      "createdAt": "2026-03-03T19:14:40.532Z",
+      "firstName": "System",
+      "lastName": "Admin",
+      "phone": "",
+      "profilePicture": "",
+      "failedLoginAttempts": 0
     },
     {
       "id": 2,
-      "username": "Isaac.Joyner",
-      "email": "boywonder0806@gmail.com",
-      "role": "admin",
-      "passwordHash": "$2a$10$LNt275w9lcYAtB7GCEXUbesniVHQet2WEzVBB/qJtyWX/x58IPjy2",
+      "username": "ijoyne1",
+      "email": "ijoyne1@lsu.edu",
+      "role": "System Developer",
+      "passwordHash": "$2a$10$qZP30YINO5RpXAgdguRxvOCMa6iRXERa4p8MHAR5ty.4kVFMCt7Pa",
       "active": true,
       "mustChangePassword": false,
-      "createdAt": "2026-03-03T19:16:17.758Z"
-    },
-    {
-      "id": 3,
-      "username": "Test.User",
-      "email": "test@eatjoelles.com",
-      "role": "manager",
-      "passwordHash": "$2a$10$JyK.WZhCWgWsfuy0BFvBHu37sP0dLjqyMcXrdYAmg9JF3H3na3W/C",
-      "active": true,
-      "mustChangePassword": false,
-      "createdAt": "2026-03-04T00:35:31.922Z"
+      "createdAt": "2026-03-04T06:08:25.641Z",
+      "firstName": "Isaac",
+      "lastName": "Joyner",
+      "phone": "8134923490",
+      "profilePicture": "",
+      "failedLoginAttempts": 0
     }
   ],
   "menus": [
@@ -104,8 +112,7 @@
         "starters",
         "mains",
         "desserts",
-        "drinks",
-        "test"
+        "drinks"
       ],
       "items": [
         {
@@ -123,7 +130,7 @@
           "description": "Creamy burrata, cured prosciutto, honey drizzle, arugula",
           "price": "$18",
           "sort_order": 1,
-          "available": false
+          "available": true
         },
         {
           "id": 3,
@@ -243,5 +250,55 @@
       ]
     }
   ],
-  "active_menu_id": 1
+  "active_menu_id": 1,
+  "roles": [
+    {
+      "id": 1,
+      "name": "General Manager",
+      "description": "This role should be assigned to the general manager for website control acess.",
+      "permissions": {
+        "menu": "full",
+        "hours": "full",
+        "settings": "hidden",
+        "about": "hidden",
+        "users": "view",
+        "roles": "hidden"
+      },
+      "color": "#ffffff"
+    },
+    {
+      "id": 2,
+      "name": "System Developer",
+      "description": "SoulServe Systems Team Members",
+      "permissions": {
+        "menu": "full",
+        "hours": "full",
+        "settings": "full",
+        "about": "full",
+        "users": "full",
+        "roles": "full"
+      },
+      "color": "#00ffee"
+    }
+  ],
+  "messages": [
+    {
+      "id": 1,
+      "name": "Douglas Joyner",
+      "email": "isaac.joyner@gmail.com",
+      "phone": "8134923490",
+      "message": "This is a test message, thanks!",
+      "read": true,
+      "createdAt": "2026-03-04T06:44:33.914Z"
+    },
+    {
+      "id": 2,
+      "name": "douglas",
+      "email": "fd@gmail.com",
+      "phone": "9999999999",
+      "message": "I ENJOYED THE FOOD SO MUCH! THANK YOU FOR THE GREAT EXPIERENCE!",
+      "read": true,
+      "createdAt": "2026-03-04T06:47:49.341Z"
+    }
+  ]
 }

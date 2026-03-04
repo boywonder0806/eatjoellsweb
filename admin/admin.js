@@ -10,42 +10,361 @@ fetch('/api/admin/check')
     if (!r.ok) window.location.href = '/admin/login';
     return r.json();
   })
-  .then(data => {
+  .then(async data => {
     currentUser = data;
 
-    document.getElementById('adminUsername').textContent = data.username;
-    const avatar = document.getElementById('adminAvatar');
-    if (avatar) avatar.textContent = data.username.charAt(0).toUpperCase();
+    // Load full profile to get firstName/lastName/profilePicture
+    const profRes = await fetch('/api/admin/profile');
+    if (profRes.ok) Object.assign(currentUser, await profRes.json());
+
+    document.getElementById('adminUsername').textContent =
+      (currentUser.firstName && currentUser.lastName)
+        ? `${currentUser.firstName} ${currentUser.lastName}`
+        : currentUser.username;
+    updateSidebarAvatar(currentUser);
 
     const roleBadge = document.getElementById('roleBadge');
     if (roleBadge) {
-      roleBadge.textContent = data.role === 'admin' ? 'Admin' : 'Manager';
+      roleBadge.textContent = data.role === 'admin' ? 'Admin' : data.role.charAt(0).toUpperCase() + data.role.slice(1);
       roleBadge.className   = `role-badge role-badge--${data.role}`;
     }
 
-    applyRoleGating(data.role);
+    applyRoleGating(data);
 
     if (data.mustChangePassword) {
       showChangePwModal(true); // forced — no cancel
     }
 
-    loadMenus();
-    loadHours();
-    if (data.role === 'admin') {
-      loadSettings();
-      loadUsers();
-      loadAboutPage();
-      loadTeam();
-    }
+    const perms = data.permissions; // null = admin
+    const canView = (panel) => data.role === 'admin' || (perms?.[panel] === 'view' || perms?.[panel] === 'full');
+
+    if (canView('menu'))     loadMenus();
+    if (canView('hours'))    loadHours();
+    if (canView('settings')) loadSettings();
+    if (canView('users'))    loadUsers();
+    if (canView('about'))  { loadAboutPage(); loadTeam(); }
+    if (canView('messages')) loadMessages();
+    loadRoles(); // always load for badge colors; management UI only visible to admin
   })
   .catch(() => window.location.href = '/admin/login');
 
 // ── Role gating ──────────────────────────────
-function applyRoleGating(role) {
-  if (role !== 'admin') {
-    document.querySelectorAll('[data-admin-only]').forEach(el => el.classList.add('hidden'));
+function applyRoleGating(data) {
+  const PANELS  = ['menu', 'hours', 'settings', 'about', 'messages', 'users', 'roles'];
+  const isAdmin = data.role === 'admin';
+  const perms   = data.permissions; // null = admin
+
+  PANELS.forEach(panel => {
+    const level      = isAdmin ? 'full' : (perms?.[panel] ?? 'hidden');
+    const sidebarBtn = document.querySelector(`.sidebar__link[data-panel="${panel}"]`);
+    const section    = document.getElementById(`panel-${panel}`);
+
+    if (level === 'hidden') {
+      if (sidebarBtn) sidebarBtn.style.display = 'none';
+      if (section)    section.classList.add('panel--hidden');
+    } else if (level === 'view') {
+      if (section) section.classList.add('panel--readonly');
+    }
+  });
+
+  if (!isAdmin) {
+    document.querySelectorAll('[data-admin-only]').forEach(el => { el.style.display = 'none'; });
+
+    // Hide the "Admin" sidebar section label if both users and roles are hidden
+    const adminPanels = ['users', 'roles'];
+    const allHidden   = adminPanels.every(p => (perms?.[p] ?? 'hidden') === 'hidden');
+    const label       = document.getElementById('sidebarAdminSection');
+    if (label) label.style.display = allHidden ? 'none' : '';
   }
 }
+
+// ── Avatar helper ────────────────────────────
+function updateSidebarAvatar(user) {
+  const avatar = document.getElementById('adminAvatar');
+  if (!avatar) return;
+  if (user.profilePicture) {
+    avatar.style.backgroundImage = `url(${CSS.escape ? user.profilePicture : user.profilePicture})`;
+    avatar.style.backgroundSize  = 'cover';
+    avatar.style.backgroundPosition = 'center';
+    avatar.textContent = '';
+  } else {
+    avatar.style.backgroundImage = '';
+    const initials = (user.firstName && user.lastName)
+      ? (user.firstName[0] + user.lastName[0]).toUpperCase()
+      : user.username.charAt(0).toUpperCase();
+    avatar.textContent = initials;
+  }
+}
+
+// ── Profile Modal (self only) ──────────────────
+let pendingProfilePicture = null; // base64 data URL, '' to clear, null = unchanged
+
+function openProfileModal() {
+  pendingProfilePicture = null;
+  const user = currentUser;
+  if (!user) return;
+
+  document.getElementById('profileFirstName').value   = user.firstName || '';
+  document.getElementById('profileLastName').value    = user.lastName  || '';
+  document.getElementById('profileEmail').value       = user.email     || '';
+  document.getElementById('profilePhone').value       = user.phone     || '';
+  document.getElementById('profilePictureFile').value = '';
+  document.getElementById('profileError').textContent = '';
+
+  document.getElementById('profilePicRemoveBtn').style.display = user.profilePicture ? 'block' : 'none';
+  updateProfileAvatarPreview(user.profilePicture || '', user);
+  document.getElementById('profileModal').classList.remove('hidden');
+}
+
+function updateProfileAvatarPreview(url, user) {
+  const preview = document.getElementById('profileAvatarPreview');
+  if (!preview) return;
+  if (url) {
+    preview.style.backgroundImage    = `url(${url})`;
+    preview.style.backgroundSize     = 'cover';
+    preview.style.backgroundPosition = 'center';
+    preview.querySelector('.profile-upload-overlay').style.opacity = '0';
+  } else {
+    preview.style.backgroundImage = '';
+    preview.querySelector('.profile-upload-overlay').style.opacity = '';
+    const u = user || currentUser;
+    const initials = (u.firstName && u.lastName)
+      ? (u.firstName[0] + u.lastName[0]).toUpperCase()
+      : (u.username || '?').charAt(0).toUpperCase();
+    preview.dataset.initials = initials;
+  }
+}
+
+document.getElementById('profilePictureFile')?.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingProfilePicture = ev.target.result;
+    updateProfileAvatarPreview(pendingProfilePicture, null);
+    document.getElementById('profilePicRemoveBtn').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('profilePicRemoveBtn')?.addEventListener('click', () => {
+  pendingProfilePicture = '';
+  document.getElementById('profilePictureFile').value = '';
+  updateProfileAvatarPreview('', currentUser);
+  document.getElementById('profilePicRemoveBtn').style.display = 'none';
+});
+
+document.getElementById('profileSaveBtn')?.addEventListener('click', async () => {
+  const payload = {
+    firstName: document.getElementById('profileFirstName').value.trim(),
+    lastName:  document.getElementById('profileLastName').value.trim(),
+    email:     document.getElementById('profileEmail').value.trim(),
+    phone:     document.getElementById('profilePhone').value.trim()
+  };
+  if (pendingProfilePicture !== null) payload.profilePicture = pendingProfilePicture;
+
+  const res = await fetch('/api/admin/profile', {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const d = await res.json();
+    document.getElementById('profileError').textContent = d.error || 'Failed to save';
+    return;
+  }
+
+  const saved = await res.json();
+  document.getElementById('profileModal').classList.add('hidden');
+  Object.assign(currentUser, saved);
+  document.getElementById('adminUsername').textContent =
+    (saved.firstName && saved.lastName) ? `${saved.firstName} ${saved.lastName}` : saved.username;
+  updateSidebarAvatar(saved);
+});
+
+document.getElementById('profileCancelBtn')?.addEventListener('click', () => {
+  document.getElementById('profileModal').classList.add('hidden');
+});
+document.getElementById('profileModal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+document.getElementById('profileBtn')?.addEventListener('click', () => openProfileModal());
+
+// ── Manage User Modal ──────────────────────────
+let manageUserId = null;
+let managePendingPicture = null;
+
+function openManageUserModal(id) {
+  manageUserId = id;
+  managePendingPicture = null;
+  const user = allUsers.find(u => u.id === id);
+  if (!user) return;
+
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+  document.getElementById('manageUserTitle').textContent = fullName || user.username;
+  document.getElementById('manageUserSub').textContent =
+    `@${user.username} · ${user.role} · ${user.active ? 'Active' : 'Locked'}`;
+
+  document.getElementById('manageFirstName').value = user.firstName || '';
+  document.getElementById('manageLastName').value  = user.lastName  || '';
+  document.getElementById('manageEmail').value     = user.email     || '';
+  document.getElementById('managePhone').value     = user.phone     || '';
+  document.getElementById('manageUsername').value  = user.username  || '';
+
+  const roleSelect = document.getElementById('manageRole');
+  roleSelect.innerHTML = [...allRoles.map(r => r.name), 'admin'].map(rn =>
+    `<option value="${rn}"${user.role === rn ? ' selected' : ''}>${rn}</option>`
+  ).join('');
+
+  const lockBtn = document.getElementById('manageLockBtn');
+  lockBtn.textContent = user.active ? 'Lock Account' : 'Unlock Account';
+  lockBtn.classList.toggle('btn-ghost--warning', !user.active);
+
+  updateManageAvatarPreview(user.profilePicture || '', user);
+  document.getElementById('managePicRemoveBtn').style.display = user.profilePicture ? 'block' : 'none';
+  document.getElementById('manageProfilePictureFile').value = '';
+  document.getElementById('manageResetPwForm').classList.add('hidden');
+  document.getElementById('manageTempPw').value = '';
+  document.getElementById('manageUserError').textContent = '';
+  document.getElementById('manageUserModal').classList.remove('hidden');
+}
+
+function updateManageAvatarPreview(url, user) {
+  const preview = document.getElementById('manageAvatarPreview');
+  if (!preview) return;
+  if (url) {
+    preview.style.backgroundImage    = `url(${url})`;
+    preview.style.backgroundSize     = 'cover';
+    preview.style.backgroundPosition = 'center';
+    preview.querySelector('.profile-upload-overlay').style.opacity = '0';
+  } else {
+    preview.style.backgroundImage = '';
+    preview.querySelector('.profile-upload-overlay').style.opacity = '';
+    const u = user || allUsers.find(u => u.id === manageUserId);
+    const initials = (u?.firstName && u?.lastName)
+      ? (u.firstName[0] + u.lastName[0]).toUpperCase()
+      : (u?.username || '?').charAt(0).toUpperCase();
+    preview.dataset.initials = initials;
+  }
+}
+
+function closeManageUserModal() {
+  document.getElementById('manageUserModal').classList.add('hidden');
+}
+
+document.getElementById('manageUserCloseBtn').addEventListener('click', closeManageUserModal);
+document.getElementById('manageUserCancelBtn').addEventListener('click', closeManageUserModal);
+document.getElementById('manageUserModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeManageUserModal();
+});
+
+document.getElementById('manageProfilePictureFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    managePendingPicture = ev.target.result;
+    updateManageAvatarPreview(managePendingPicture, null);
+    document.getElementById('managePicRemoveBtn').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('managePicRemoveBtn').addEventListener('click', () => {
+  managePendingPicture = '';
+  document.getElementById('manageProfilePictureFile').value = '';
+  const user = allUsers.find(u => u.id === manageUserId);
+  updateManageAvatarPreview('', user);
+  document.getElementById('managePicRemoveBtn').style.display = 'none';
+});
+
+document.getElementById('manageUserSaveBtn').addEventListener('click', async () => {
+  const payload = {
+    firstName: document.getElementById('manageFirstName').value.trim(),
+    lastName:  document.getElementById('manageLastName').value.trim(),
+    email:     document.getElementById('manageEmail').value.trim(),
+    phone:     document.getElementById('managePhone').value.trim(),
+    username:  document.getElementById('manageUsername').value.trim(),
+    role:      document.getElementById('manageRole').value,
+  };
+  if (managePendingPicture !== null) payload.profilePicture = managePendingPicture;
+
+  const res = await fetch(`/api/admin/users/${manageUserId}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(payload)
+  });
+  if (res.ok) {
+    closeManageUserModal();
+    await loadUsers();
+  } else {
+    const d = await res.json();
+    document.getElementById('manageUserError').textContent = d.error || 'Failed to save changes';
+  }
+});
+
+document.getElementById('manageResetPwToggle').addEventListener('click', () => {
+  document.getElementById('manageResetPwForm').classList.toggle('hidden');
+});
+
+document.getElementById('manageResetPwSubmit').addEventListener('click', async () => {
+  const tempPw = document.getElementById('manageTempPw').value.trim();
+  if (!tempPw) return;
+  const res = await fetch(`/api/admin/users/${manageUserId}/reset-password`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ tempPassword: tempPw })
+  });
+  const errEl = document.getElementById('manageUserError');
+  if (res.ok) {
+    document.getElementById('manageTempPw').value = '';
+    document.getElementById('manageResetPwForm').classList.add('hidden');
+    errEl.style.color = 'var(--gold)';
+    errEl.textContent = '✓ Password reset — user must change on next login';
+    setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 3000);
+  } else {
+    const d = await res.json();
+    errEl.style.color = '';
+    errEl.textContent = d.error || 'Failed to reset password';
+  }
+});
+
+document.getElementById('manageLockBtn').addEventListener('click', async () => {
+  const user = allUsers.find(u => u.id === manageUserId);
+  const res = await fetch(`/api/admin/users/${manageUserId}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ active: !user.active })
+  });
+  if (res.ok) {
+    await loadUsers();
+    openManageUserModal(manageUserId);
+  } else {
+    const d = await res.json();
+    document.getElementById('manageUserError').textContent = d.error || 'Failed to update status';
+  }
+});
+
+document.getElementById('manageDeleteBtn').addEventListener('click', async () => {
+  const user = allUsers.find(u => u.id === manageUserId);
+  const ok = await showConfirm({
+    title:       'Delete Account',
+    message:     `Permanently delete @${user.username}? All their data will be removed and cannot be recovered.`,
+    confirmText: 'Delete Account',
+    type:        'danger'
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/admin/users/${manageUserId}`, { method: 'DELETE' });
+  if (res.ok) {
+    closeManageUserModal();
+    await loadUsers();
+  } else {
+    const d = await res.json();
+    document.getElementById('manageUserError').textContent = d.error || 'Failed to delete user';
+  }
+});
 
 // ── Sidebar navigation ───────────────────────
 document.querySelectorAll('.sidebar__link').forEach(btn => {
@@ -74,6 +393,64 @@ function showMsg(el, text, isError = false) {
   el.textContent = text;
   el.style.color = isError ? 'var(--danger-lt)' : 'var(--success)';
   setTimeout(() => { el.textContent = ''; }, 3500);
+}
+
+// ── Role badge color helpers ──────────────────
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Returns an inline style string for a role badge, or '' for admin (uses CSS)
+function roleBadgeStyle(roleName) {
+  if (roleName === 'admin') return '';
+  const role = allRoles.find(r => r.name === roleName);
+  if (!role?.color) return '';
+  const hex = role.color;
+  return `style="background:${hexToRgba(hex, 0.12)};color:${hex};border-color:${hexToRgba(hex, 0.3)}"`;
+}
+
+// Update the sidebar role badge for the currently logged-in user
+function refreshSidebarRoleBadge() {
+  const badge = document.getElementById('roleBadge');
+  if (!badge || !currentUser || currentUser.role === 'admin') return;
+  const role = allRoles.find(r => r.name === currentUser.role);
+  if (!role?.color) return;
+  const hex = role.color;
+  badge.style.background  = hexToRgba(hex, 0.12);
+  badge.style.color       = hex;
+  badge.style.borderColor = hexToRgba(hex, 0.3);
+}
+
+// ── Custom confirm dialog ─────────────────────
+function showConfirm({ title, message, confirmText = 'Confirm', type = 'danger' }) {
+  return new Promise(resolve => {
+    document.getElementById('confirmTitle').textContent   = title;
+    document.getElementById('confirmMessage').textContent = message;
+
+    const icon  = document.getElementById('confirmIcon');
+    icon.textContent = type === 'warning' ? '⚠' : '!';
+    icon.className   = `confirm-icon confirm-icon--${type}`;
+
+    const okBtn = document.getElementById('confirmOkBtn');
+    okBtn.textContent = confirmText;
+    okBtn.className   = type === 'warning' ? 'btn-gold' : 'btn-ghost btn-ghost--danger';
+
+    document.getElementById('confirmModal').classList.remove('hidden');
+
+    function cleanup() {
+      document.getElementById('confirmModal').classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      document.getElementById('confirmCancelBtn').removeEventListener('click', onCancel);
+    }
+    function onOk()     { cleanup(); resolve(true);  }
+    function onCancel() { cleanup(); resolve(false); }
+
+    okBtn.addEventListener('click', onOk);
+    document.getElementById('confirmCancelBtn').addEventListener('click', onCancel);
+  });
 }
 
 // ── Change Password Modal ─────────────────────
@@ -315,7 +692,13 @@ async function saveMenuRow(id) {
 }
 
 async function deleteMenuItem(id) {
-  if (!confirm('Delete this menu item?')) return;
+  const ok = await showConfirm({
+    title:       'Delete Menu Item',
+    message:     'This item will be permanently removed from the menu.',
+    confirmText: 'Delete',
+    type:        'danger'
+  });
+  if (!ok) return;
   await fetch(`/api/admin/menus/${currentMenuId}/items/${id}`, { method: 'DELETE' });
   await loadMenuItems(currentMenuId);
 }
@@ -361,7 +744,13 @@ async function activateCurrentMenu() {
 async function deleteCurrentMenu() {
   const menu = allMenus.find(m => m.id === currentMenuId);
   if (!menu) return;
-  if (!confirm(`Delete "${menu.name}"? All items will be permanently removed.`)) return;
+  const ok = await showConfirm({
+    title:       `Delete "${menu.name}"`,
+    message:     'All items in this menu will be permanently removed. This cannot be undone.',
+    confirmText: 'Delete Menu',
+    type:        'danger'
+  });
+  if (!ok) return;
   const res = await fetch(`/api/admin/menus/${currentMenuId}`, { method: 'DELETE' });
   if (res.ok) {
     allMenus      = allMenus.filter(m => m.id !== currentMenuId);
@@ -396,7 +785,15 @@ async function removeCategory(catName) {
   const menu = allMenus.find(m => m.id === currentMenuId);
   if (!menu) return;
   const hasItems = allMenuItems.some(i => i.category === catName);
-  if (hasItems && !confirm(`"${catName}" still has items. Remove category anyway?`)) return;
+  if (hasItems) {
+    const ok = await showConfirm({
+      title:       'Remove Category',
+      message:     `"${catName}" still has items in it. Removing the category will hide those items. Continue?`,
+      confirmText: 'Remove Anyway',
+      type:        'warning'
+    });
+    if (!ok) return;
+  }
   const updated = menu.categories.filter(c => c !== catName);
   const res = await fetch(`/api/admin/menus/${currentMenuId}`, {
     method:  'PUT',
@@ -556,7 +953,13 @@ async function saveHoursRow(id) {
 }
 
 async function deleteHoursRow(id) {
-  if (!confirm('Delete this hours row?')) return;
+  const ok = await showConfirm({
+    title:       'Delete Hours',
+    message:     'This hours entry will be permanently removed.',
+    confirmText: 'Delete',
+    type:        'danger'
+  });
+  if (!ok) return;
   await fetch(`/api/admin/hours/${id}`, { method: 'DELETE' });
   await loadHours();
 }
@@ -644,101 +1047,23 @@ function renderUsersTable() {
   }
   empty.classList.add('hidden');
 
-  tbody.innerHTML = allUsers.map(u => `
+  tbody.innerHTML = allUsers.map(u => {
+    const fullName = (u.firstName || u.lastName)
+      ? `${u.firstName || ''} ${u.lastName || ''}`.trim()
+      : '';
+    return `
     <tr data-id="${u.id}">
-      <td>${esc(u.username)}</td>
-      <td style="color:var(--muted)">${esc(u.email)}</td>
-      <td><span class="role-badge role-badge--${esc(u.role)}">${esc(u.role)}</span></td>
-      <td><span class="badge badge--${u.active ? 'active' : 'inactive'}">${u.active ? 'Active' : 'Inactive'}</span></td>
       <td>
-        <div class="action-btns">
-          <button class="btn-edit" onclick="editUserRow(${u.id})">Edit</button>
-          <button class="btn-edit" style="color:var(--muted)" onclick="resetUserPassword(${u.id})">Reset PW</button>
-          <button class="btn-delete" onclick="deleteUser(${u.id})">Delete</button>
-        </div>
+        ${fullName ? `<div>${esc(fullName)}</div><div style="color:var(--muted);font-size:0.82rem">${esc(u.username)}</div>` : esc(u.username)}
+      </td>
+      <td style="color:var(--muted)">${esc(u.email)}</td>
+      <td><span class="role-badge role-badge--${esc(u.role)}" ${roleBadgeStyle(u.role)}>${esc(u.role)}</span></td>
+      <td><span class="badge badge--${u.active ? 'active' : 'inactive'}">${u.active ? 'Active' : 'Locked'}</span></td>
+      <td>
+        <button class="btn-edit" onclick="openManageUserModal(${u.id})">Manage</button>
       </td>
     </tr>
-  `).join('');
-}
-
-function editUserRow(id) {
-  const user = allUsers.find(u => u.id === id);
-  if (!user) return;
-  const tr = document.querySelector(`#usersTbody tr[data-id="${id}"]`);
-  tr.classList.add('editing');
-  tr.innerHTML = `
-    <td><input data-field="username" value="${esc(user.username)}" /></td>
-    <td><input data-field="email" type="email" value="${esc(user.email)}" /></td>
-    <td>
-      <select data-field="role">
-        <option value="admin"   ${user.role === 'admin'   ? 'selected' : ''}>Admin</option>
-        <option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option>
-      </select>
-    </td>
-    <td>
-      <select data-field="active">
-        <option value="true"  ${user.active  ? 'selected' : ''}>Active</option>
-        <option value="false" ${!user.active ? 'selected' : ''}>Inactive</option>
-      </select>
-    </td>
-    <td>
-      <div class="action-btns">
-        <button class="btn-save" onclick="saveUserRow(${id})">Save</button>
-        <button class="btn-cancel" onclick="renderUsersTable()">Cancel</button>
-      </div>
-    </td>
-  `;
-}
-
-async function saveUserRow(id) {
-  const tr      = document.querySelector(`#usersTbody tr[data-id="${id}"]`);
-  const fields  = tr.querySelectorAll('[data-field]');
-  const payload = {};
-  fields.forEach(f => {
-    payload[f.dataset.field] = f.dataset.field === 'active' ? f.value === 'true' : f.value.trim();
-  });
-
-  const res = await fetch(`/api/admin/users/${id}`, {
-    method:  'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload)
-  });
-
-  if (res.ok) {
-    await loadUsers();
-  } else {
-    const data = await res.json();
-    alert(data.error || 'Failed to save changes');
-    renderUsersTable();
-  }
-}
-
-async function deleteUser(id) {
-  if (!confirm('Delete this user account? This cannot be undone.')) return;
-  const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
-  if (res.ok) {
-    await loadUsers();
-  } else {
-    const data = await res.json();
-    alert(data.error || 'Failed to delete user');
-  }
-}
-
-async function resetUserPassword(id) {
-  const tempPw = prompt('Enter a temporary password for this user.\nThey will be required to change it on next login:');
-  if (!tempPw) return;
-  const res = await fetch(`/api/admin/users/${id}/reset-password`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ tempPassword: tempPw })
-  });
-  const msg = document.getElementById('usersMsg');
-  if (res.ok) {
-    showMsg(msg, '✓ Password reset — user must change on next login');
-  } else {
-    const data = await res.json();
-    showMsg(msg, data.error || 'Failed to reset password', true);
-  }
+  `; }).join('');
 }
 
 // Add user form
@@ -773,6 +1098,94 @@ document.getElementById('addUserForm').addEventListener('submit', async (e) => {
     showMsg(msg, data.error || 'Failed to create user', true);
   }
 });
+
+// ── MESSAGES ──────────────────────────────────
+
+let allMessages = [];
+
+async function loadMessages() {
+  const res = await fetch('/api/admin/messages');
+  if (!res.ok) return;
+  allMessages = await res.json();
+  renderMessages();
+  updateUnreadBadge();
+}
+
+function updateUnreadBadge() {
+  const badge   = document.getElementById('unreadBadge');
+  if (!badge) return;
+  const unread  = allMessages.filter(m => !m.read).length;
+  if (unread > 0) {
+    badge.textContent = unread;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function renderMessages() {
+  const list  = document.getElementById('messagesList');
+  const empty = document.getElementById('messagesEmpty');
+  if (!list) return;
+
+  if (!allMessages.length) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  list.innerHTML = allMessages.map(m => {
+    const date = new Date(m.createdAt).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+    return `
+    <div class="msg-card ${m.read ? '' : 'msg-card--unread'}" data-msg-id="${m.id}">
+      <div class="msg-card__header">
+        <div class="msg-card__from">
+          ${!m.read ? '<span class="msg-unread-dot"></span>' : ''}
+          <strong>${esc(m.name)}</strong>
+          <span class="msg-meta">${esc(m.email)}${m.phone ? ' · ' + esc(m.phone) : ''}</span>
+        </div>
+        <span class="msg-date">${date}</span>
+      </div>
+      <p class="msg-body">${esc(m.message)}</p>
+      <div class="msg-actions">
+        <button class="btn-ghost btn-sm" onclick="toggleMessageRead(${m.id})">${m.read ? 'Mark Unread' : 'Mark as Read'}</button>
+        <button class="btn-ghost btn-sm btn-ghost--danger" onclick="deleteMessage(${m.id})">Delete</button>
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+async function toggleMessageRead(id) {
+  const res = await fetch(`/api/admin/messages/${id}/read`, { method: 'PUT' });
+  if (res.ok) {
+    const updated = await res.json();
+    const idx = allMessages.findIndex(m => m.id === id);
+    if (idx !== -1) allMessages[idx] = updated;
+    renderMessages();
+    updateUnreadBadge();
+  }
+}
+
+async function deleteMessage(id) {
+  const ok = await showConfirm({
+    title:       'Delete Message',
+    message:     'This message will be permanently deleted.',
+    confirmText: 'Delete',
+    type:        'danger'
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/admin/messages/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    allMessages = allMessages.filter(m => m.id !== id);
+    renderMessages();
+    updateUnreadBadge();
+  }
+}
 
 // ── ABOUT PAGE ────────────────────────────────
 
@@ -874,7 +1287,13 @@ async function saveTeamRow(id) {
 }
 
 async function deleteTeamMember(id) {
-  if (!confirm('Remove this team member?')) return;
+  const ok = await showConfirm({
+    title:       'Remove Team Member',
+    message:     'This person will be removed from the About page team section.',
+    confirmText: 'Remove',
+    type:        'danger'
+  });
+  if (!ok) return;
   await fetch(`/api/admin/team/${id}`, { method: 'DELETE' });
   await loadTeam();
 }
@@ -916,3 +1335,184 @@ async function saveNewTeamMember(btn) {
   });
   await loadTeam();
 }
+
+// ── ROLES ──────────────────────────────────────
+
+let allRoles = [];
+
+async function loadRoles() {
+  const res = await fetch('/api/admin/roles');
+  if (!res.ok) return;
+  allRoles = await res.json();
+  refreshSidebarRoleBadge();
+  renderRolesTable();
+  populateRoleDropdown();
+  if (allUsers.length) renderUsersTable();
+}
+
+function renderRolesTable() {
+  const tbody = document.getElementById('rolesTbody');
+  const empty = document.getElementById('rolesEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = allRoles.map(role => {
+    const color = role.color || '#9a9088';
+    return `
+    <tr data-role-id="${role.id}">
+      <td><span class="role-badge" ${roleBadgeStyle(role.name)}>${esc(role.name)}</span></td>
+      <td class="role-desc-cell">${esc(role.description)}</td>
+      <td>
+        <div class="color-swatch-wrap">
+          <input type="color" class="color-swatch" value="${color}"
+            onchange="saveRoleColor(${role.id}, this.value)"
+            title="Change badge color" />
+        </div>
+      </td>
+      <td>
+        <div class="action-btns">
+          <button class="btn-edit" onclick="openRoleEditModal(${role.id})">Edit</button>
+          <button class="btn-delete" onclick="deleteRole(${role.id})">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `;
+  }).join('');
+
+  empty.classList.toggle('hidden', allRoles.length > 0);
+}
+
+async function saveRoleColor(roleId, color) {
+  await fetch(`/api/admin/roles/${roleId}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ color })
+  });
+  const role = allRoles.find(r => r.id === roleId);
+  if (role) {
+    role.color = color;
+    renderRolesTable();
+    refreshSidebarRoleBadge();
+    if (allUsers.length) renderUsersTable();
+  }
+}
+
+// ── Edit Permissions Modal ────────────────────
+let editingRoleId = null;
+
+function openRoleEditModal(roleId) {
+  const role = allRoles.find(r => r.id === roleId);
+  if (!role) return;
+  editingRoleId = roleId;
+
+  document.getElementById('editRoleModalTitle').textContent = `Edit Permissions — ${role.name}`;
+  document.getElementById('editRoleModalSub').textContent   = role.description || '';
+  document.getElementById('editRoleError').textContent      = '';
+
+  const PANELS = ['menu', 'hours', 'settings', 'about', 'messages', 'users', 'roles'];
+  const LABELS = { hidden: 'None', view: 'View', full: 'Edit' };
+  const PANEL_LABELS = { menu: 'Menu Items', hours: 'Hours', settings: 'Settings', about: 'About Page', messages: 'Messages', users: 'Users', roles: 'Roles' };
+
+  document.getElementById('editRolePermsGrid').innerHTML = PANELS.map(p => `
+    <div class="role-perm-row">
+      <span class="role-perm-label">${PANEL_LABELS[p]}</span>
+      <div class="role-perm-options">
+        ${['hidden', 'view', 'full'].map(lv => `
+          <label class="perm-radio">
+            <input type="radio" name="perm-${p}" value="${lv}" ${(role.permissions[p] ?? 'hidden') === lv ? 'checked' : ''} />
+            <span>${LABELS[lv]}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('editRoleModal').classList.remove('hidden');
+}
+
+async function saveRolePermissions() {
+  const PANELS = ['menu', 'hours', 'settings', 'about', 'users', 'roles'];
+  const permissions = {};
+  PANELS.forEach(p => {
+    const checked = document.querySelector(`input[name="perm-${p}"]:checked`);
+    permissions[p] = checked ? checked.value : 'hidden';
+  });
+
+  const res = await fetch(`/api/admin/roles/${editingRoleId}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ permissions })
+  });
+  const msg = document.getElementById('rolesMsg');
+  if (res.ok) {
+    document.getElementById('editRoleModal').classList.add('hidden');
+    showMsg(msg, '✓ Saved');
+    await loadRoles();
+  } else {
+    const data = await res.json();
+    document.getElementById('editRoleError').textContent = data.error || 'Failed to save';
+  }
+}
+
+document.getElementById('editRoleSaveBtn')?.addEventListener('click', saveRolePermissions);
+document.getElementById('editRoleCancelBtn')?.addEventListener('click', () => {
+  document.getElementById('editRoleModal').classList.add('hidden');
+});
+document.getElementById('editRoleModal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+async function deleteRole(roleId) {
+  const ok = await showConfirm({
+    title:       'Delete Role',
+    message:     'This role will be permanently deleted and can no longer be assigned to users.',
+    confirmText: 'Delete Role',
+    type:        'danger'
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/admin/roles/${roleId}`, { method: 'DELETE' });
+  const msg = document.getElementById('rolesMsg');
+  if (res.ok) {
+    await loadRoles();
+  } else {
+    const data = await res.json();
+    showMsg(msg, data.error || 'Failed to delete role', true);
+  }
+}
+
+function populateRoleDropdown() {
+  const sel = document.querySelector('#addUserForm select[name="role"]');
+  if (!sel) return;
+  sel.innerHTML = [
+    ...allRoles.map(r => `<option value="${esc(r.name)}">${esc(r.name)}</option>`),
+    `<option value="admin">admin</option>`
+  ].join('');
+}
+
+document.getElementById('addRoleBtn')?.addEventListener('click', () => {
+  document.getElementById('addRoleForm').classList.remove('hidden');
+});
+
+document.getElementById('cancelAddRoleBtn')?.addEventListener('click', () => {
+  document.getElementById('addRoleForm').classList.add('hidden');
+  document.getElementById('addRoleForm').reset();
+});
+
+document.getElementById('addRoleForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd  = new FormData(e.target);
+  const res = await fetch('/api/admin/roles', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ name: fd.get('name').trim(), description: fd.get('description').trim() })
+  });
+  const msg = document.getElementById('rolesMsg');
+  if (res.ok) {
+    e.target.reset();
+    document.getElementById('addRoleForm').classList.add('hidden');
+    await loadRoles();
+    showMsg(msg, '✓ Role created');
+  } else {
+    const data = await res.json();
+    showMsg(msg, data.error || 'Failed to create role', true);
+  }
+});
