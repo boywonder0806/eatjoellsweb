@@ -155,6 +155,15 @@ async function loadSiteData() {
   }
 }
 
+function renderDietaryTags(dietary) {
+  if (!dietary || dietary.length === 0) return '';
+  const labels = { gf: 'GF', v: 'V', vg: 'VG', spicy: '🌶 Spicy', nuts: '⚠ Nuts' };
+  const tags = dietary.map(d =>
+    '<span class="menu__tag menu__tag--' + escHtml(d) + '">' + (labels[d] || escHtml(d)) + '</span>'
+  ).join('');
+  return '<div class="menu__item-tags">' + tags + '</div>';
+}
+
 function renderMenu(data) {
   const { categories = [], grouped = {} } = data;
   const tabsEl   = document.getElementById('menuTabs');
@@ -189,6 +198,7 @@ function renderMenu(data) {
                 </div>
                 <span class="menu__price">${escHtml(item.price)}</span>
               </div>
+              ${renderDietaryTags(item.dietary)}
             </div>
           `).join('')}
         </div>
@@ -236,6 +246,39 @@ function renderSettings(data) {
   if (addr  && data.address) addr.textContent  = data.address;
   if (phone && data.phone)   phone.textContent = data.phone;
   if (email && data.email)   email.textContent = data.email;
+
+  // Announcement banner
+  const banner     = document.getElementById('siteBanner');
+  const bannerText = document.getElementById('siteBannerText');
+  if (!banner || !bannerText) return;
+
+  const dismissable   = data.banner_dismissable !== false; // default true
+  const dismissedText = sessionStorage.getItem('bannerDismissedText');
+  const dismissed     = dismissable && dismissedText === data.banner_text;
+  const closeBtn      = document.getElementById('siteBannerClose');
+  if (closeBtn) closeBtn.style.display = dismissable ? '' : 'none';
+
+  if (data.banner_enabled && data.banner_text && !dismissed) {
+    bannerText.textContent = data.banner_text;
+    banner.className = 'site-banner site-banner--' + (data.banner_type || 'info');
+    document.body.classList.add('has-banner');
+  } else {
+    banner.classList.add('hidden');
+    document.body.classList.remove('has-banner');
+  }
 }
+
+document.getElementById('siteBannerClose')?.addEventListener('click', () => {
+  const banner = document.getElementById('siteBanner');
+  if (!banner) return;
+  // Store the exact text so only THIS message is dismissed; a new message will show again
+  sessionStorage.setItem('bannerDismissedText', document.getElementById('siteBannerText').textContent);
+  document.body.classList.remove('has-banner'); // nav slides up immediately
+  banner.classList.add('site-banner--dismissing');
+  banner.addEventListener('animationend', () => {
+    banner.classList.add('hidden');
+    banner.classList.remove('site-banner--dismissing');
+  }, { once: true });
+});
 
 loadSiteData();

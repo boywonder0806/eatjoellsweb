@@ -82,62 +82,15 @@
         <div class="menu-selector-wrap">
           <div class="menu-selector" id="menuSelector"></div>
           <div class="menu-selector-actions">
+            <button class="btn-ghost btn-sm" id="editMenuBtn" style="display:none">Edit</button>
             <button class="btn-ghost btn-sm" id="setLiveBtn" style="display:none">Set as Live</button>
             <button class="btn-ghost btn-sm btn-ghost--danger" id="deleteMenuBtn" data-admin-only style="display:none">Delete Menu</button>
-          </div>
-        </div>
-
-        <!-- Category management bar -->
-        <div class="cat-bar">
-          <span class="cat-bar__label">Categories</span>
-          <div class="cat-tags" id="catTags"></div>
-          <div class="cat-add-wrap" id="catAddWrap" data-admin-only>
-            <input type="text" id="newCatInput" placeholder="Add category…" />
-            <button class="btn-ghost btn-sm" id="addCatBtn">Add</button>
           </div>
         </div>
 
         <!-- Add item -->
         <div class="menu-add-item-row">
           <button class="btn-gold" id="addItemBtn">+ Add Item</button>
-        </div>
-
-        <!-- Add item form -->
-        <form class="add-form hidden" id="addItemForm">
-          <span class="add-form__label">New Menu Item</span>
-          <div class="add-form__grid">
-            <div class="field">
-              <label>Category</label>
-              <select name="category" id="addItemCategory" required></select>
-            </div>
-            <div class="field">
-              <label>Name</label>
-              <input type="text" name="name" placeholder="e.g. Truffle Fries" required />
-            </div>
-            <div class="field">
-              <label>Description</label>
-              <input type="text" name="description" placeholder="e.g. Crispy fries, truffle oil, parmesan" />
-            </div>
-            <div class="field">
-              <label>Price</label>
-              <input type="text" name="price" placeholder="e.g. $14" required />
-            </div>
-            <div class="field field--full">
-              <label>Photo <span class="field-hint">(optional)</span></label>
-              <input type="file" id="addItemImage" accept="image/jpeg,image/png,image/webp,image/gif" />
-              <div class="image-preview" id="imagePreview"></div>
-              <input type="hidden" name="image" id="addItemImageValue" />
-            </div>
-          </div>
-          <div class="add-form__actions">
-            <button type="submit" class="btn-gold">Add Item</button>
-            <button type="button" class="btn-ghost" id="cancelAddBtn">Cancel</button>
-          </div>
-        </form>
-
-        <!-- Category filter tabs -->
-        <div class="cat-tabs" id="catTabs">
-          <button class="cat-tab active" data-cat="all">All</button>
         </div>
 
         <div class="table-wrap">
@@ -156,6 +109,99 @@
             <tbody id="menuTbody"></tbody>
           </table>
           <p class="empty-state hidden" id="menuEmpty">No items in this category yet.</p>
+        </div>
+        <div class="pagination" id="menuPagination"></div>
+
+        <!-- ── Edit menu modal ──── -->
+        <div class="modal-overlay hidden" id="editMenuModal">
+          <div class="modal-card modal-card--edit-menu">
+            <h2 class="modal-title">Edit Menu</h2>
+            <p class="modal-sub">Update the menu name and manage its categories.</p>
+
+            <div class="field" style="margin-bottom:1.25rem">
+              <label>Menu Name</label>
+              <div class="edit-menu-name-row">
+                <input type="text" id="editMenuNameInput" placeholder="e.g. Regular Menu" />
+                <button type="button" class="btn-gold btn-sm" id="editMenuNameSaveBtn">Save</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Categories</label>
+              <div class="cat-chips-modal" id="editMenuCategories"></div>
+              <div class="edit-menu-add-cat">
+                <input type="text" id="editMenuNewCatInput" placeholder="Add category…" />
+                <button type="button" class="btn-ghost btn-sm" id="editMenuAddCatBtn">Add</button>
+              </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top:1.5rem">
+              <button type="button" class="btn-ghost" id="editMenuModalCloseBtn">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Menu item modal (add + edit) ──── -->
+        <div class="modal-overlay hidden" id="menuItemModal">
+          <div class="modal-card modal-card--item">
+            <h2 class="modal-title" id="menuItemModalTitle">Add Menu Item</h2>
+            <p class="modal-sub">Fill in the item details below.</p>
+            <form class="modal-form" id="menuItemForm">
+              <input type="hidden" id="modalItemId" value="" />
+
+              <div class="modal-item-grid">
+                <div class="field">
+                  <label>Category</label>
+                  <select id="modalItemCategory" required></select>
+                </div>
+                <div class="field">
+                  <label>Name</label>
+                  <input type="text" id="modalItemName" placeholder="e.g. Truffle Fries" required />
+                </div>
+                <div class="field">
+                  <label>Price</label>
+                  <input type="text" id="modalItemPrice" placeholder="e.g. $14" required />
+                </div>
+                <div class="field field--span2">
+                  <label>Description</label>
+                  <input type="text" id="modalItemDescription" placeholder="e.g. Crispy fries, truffle oil, parmesan" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Photo <span class="field-hint">(optional)</span></label>
+                <div class="modal-image-row">
+                  <div class="modal-image-preview" id="modalImagePreview"></div>
+                  <div>
+                    <input type="file" id="modalItemImage" accept="image/jpeg,image/png,image/webp,image/gif" />
+                    <input type="hidden" id="modalItemImageValue" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Dietary &amp; Allergy Tags</label>
+                <div class="dietary-grid">
+                  <label class="dietary-toggle"><input type="checkbox" value="gf" class="dietary-cb" /><span>GF</span><small>Gluten Free</small></label>
+                  <label class="dietary-toggle"><input type="checkbox" value="v" class="dietary-cb" /><span>V</span><small>Vegetarian</small></label>
+                  <label class="dietary-toggle"><input type="checkbox" value="vg" class="dietary-cb" /><span>VG</span><small>Vegan</small></label>
+                  <label class="dietary-toggle"><input type="checkbox" value="spicy" class="dietary-cb" /><span>🌶</span><small>Spicy</small></label>
+                  <label class="dietary-toggle"><input type="checkbox" value="nuts" class="dietary-cb" /><span>⚠</span><small>Contains Nuts</small></label>
+                </div>
+              </div>
+
+              <label class="modal-checkbox-row">
+                <input type="checkbox" id="modalItemAvailable" checked />
+                <span>Available (uncheck to mark as out of stock)</span>
+              </label>
+
+              <p class="modal-error hidden" id="menuItemModalError"></p>
+              <div class="modal-actions">
+                <button type="submit" class="btn-gold" id="menuItemModalSaveBtn">Add Item</button>
+                <button type="button" class="btn-ghost" id="menuItemModalCancelBtn">Cancel</button>
+              </div>
+            </form>
+          </div>
         </div>
       </section>
 
@@ -195,6 +241,9 @@
         </div>
 
         <form class="settings-form" id="settingsForm">
+
+          <!-- Contact Info -->
+          <div class="settings-section-title">Contact Info</div>
           <div class="field">
             <label for="s-address">Address</label>
             <input type="text" id="s-address" name="address" placeholder="123 Main Street, Your City, ST 00000" />
@@ -207,6 +256,43 @@
             <label for="s-email">Email</label>
             <input type="email" id="s-email" name="email" placeholder="hello@joelleslounge.com" />
           </div>
+
+          <!-- Announcement Banner -->
+          <div class="settings-section-divider"></div>
+          <div class="settings-section-title">Announcement Banner</div>
+          <p class="settings-section-sub">Show a message bar at the top of the public site.</p>
+
+          <div class="settings-toggles-row">
+            <label class="banner-toggle-row">
+              <span class="toggle-switch">
+                <input type="checkbox" id="b-enabled" />
+                <span class="toggle-track"><span class="toggle-knob"></span></span>
+              </span>
+              <span class="toggle-label">Enabled</span>
+            </label>
+            <label class="banner-toggle-row">
+              <span class="toggle-switch">
+                <input type="checkbox" id="b-dismissable" />
+                <span class="toggle-track"><span class="toggle-knob"></span></span>
+              </span>
+              <span class="toggle-label">Dismissable</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="b-type">Banner type</label>
+            <select id="b-type">
+              <option value="info">Info (gold)</option>
+              <option value="promo">Promo (teal)</option>
+              <option value="warning">Warning (amber)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="b-text">Message text</label>
+            <textarea id="b-text" rows="2" placeholder="e.g. Join us this Friday for live jazz from 7 PM!"></textarea>
+          </div>
+
           <div class="settings-form__actions">
             <button type="submit" class="btn-gold">Save Changes</button>
             <span class="save-msg" id="settingsMsg"></span>

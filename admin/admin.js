@@ -515,11 +515,12 @@ document.getElementById('changePwForm').addEventListener('submit', async (e) => 
 // ── MENU ─────────────────────────────────────
 
 let allMenus      = [];
-let currentMenuId = null;
-let allMenuItems  = [];
-let activeCat     = 'all';
-let menuSortCol   = null;
-let menuSortDir   = 'asc';
+let currentMenuId    = null;
+let allMenuItems     = [];
+let menuSortCol      = null;
+let menuSortDir      = 'asc';
+let menuPage         = 1;
+const MENU_PAGE_SIZE = 10;
 
 async function loadMenus() {
   const res = await fetch('/api/admin/menus');
@@ -545,58 +546,57 @@ async function selectMenu(id) {
   renderMenuSelector();
   const menu    = allMenus.find(m => m.id === id);
   const isAdmin = currentUser?.role === 'admin';
+  const editMenuBtn   = document.getElementById('editMenuBtn');
   const setLiveBtn    = document.getElementById('setLiveBtn');
   const deleteMenuBtn = document.getElementById('deleteMenuBtn');
+  if (editMenuBtn)   editMenuBtn.style.display   = menu ? '' : 'none';
   if (setLiveBtn)    setLiveBtn.style.display    = (menu && !menu.active && isAdmin) ? '' : 'none';
   if (deleteMenuBtn) deleteMenuBtn.style.display = (allMenus.length > 1 && isAdmin)  ? '' : 'none';
   renderCategoryBar(menu);
-  activeCat = 'all';
   await loadMenuItems(id);
 }
 
 function renderCategoryBar(menu) {
-  const catTagsEl   = document.getElementById('catTags');
-  const catTabsEl   = document.getElementById('catTabs');
-  const catSelectEl = document.getElementById('addItemCategory');
+  const catSelectEl = document.getElementById('modalItemCategory');
   const cats        = menu ? (menu.categories || []) : [];
-  const isAdmin     = currentUser?.role === 'admin';
   const cap         = s => s.charAt(0).toUpperCase() + s.slice(1);
-
-  if (catTagsEl) {
-    catTagsEl.innerHTML = cats.length
-      ? cats.map(cat => `
-          <span class="cat-chip">
-            ${esc(cap(cat))}
-            ${isAdmin ? `<button class="cat-chip__remove" onclick="removeCategory('${esc(cat)}')" title="Remove">×</button>` : ''}
-          </span>`).join('')
-      : '<span class="cat-empty-hint">No categories yet.</span>';
-  }
-
-  if (catTabsEl) {
-    catTabsEl.innerHTML = '<button class="cat-tab active" data-cat="all">All</button>' +
-      cats.map(cat => `<button class="cat-tab" data-cat="${esc(cat)}">${esc(cap(cat))}</button>`).join('');
-  }
 
   if (catSelectEl) {
     catSelectEl.innerHTML = cats.length
       ? cats.map(cat => `<option value="${esc(cat)}">${esc(cap(cat))}</option>`).join('')
       : '<option value="" disabled selected>Add a category first</option>';
   }
+
+  renderEditMenuCategories(menu);
+}
+
+function renderEditMenuCategories(menu) {
+  const el      = document.getElementById('editMenuCategories');
+  if (!el) return;
+  const cats    = menu ? (menu.categories || []) : [];
+  const isAdmin = currentUser?.role === 'admin';
+  const cap     = s => s.charAt(0).toUpperCase() + s.slice(1);
+  el.innerHTML  = cats.length
+    ? cats.map(cat => `
+        <span class="cat-chip">
+          ${esc(cap(cat))}
+          ${isAdmin ? `<button class="cat-chip__remove" onclick="removeCategory('${esc(cat)}')" title="Remove">×</button>` : ''}
+        </span>`).join('')
+    : '<span class="cat-empty-hint">No categories yet.</span>';
 }
 
 async function loadMenuItems(menuId) {
   const res = await fetch(`/api/admin/menus/${menuId}/items`);
   if (!res.ok) return;
   allMenuItems = await res.json();
+  menuPage = 1;
   renderMenuTable();
 }
 
 function renderMenuTable() {
   const tbody = document.getElementById('menuTbody');
   const empty = document.getElementById('menuEmpty');
-  let items = activeCat === 'all'
-    ? [...allMenuItems]
-    : allMenuItems.filter(i => i.category === activeCat);
+  let items = [...allMenuItems];
 
   // ── Sort ──────────────────────────────────────
   if (menuSortCol) {
@@ -627,15 +627,24 @@ function renderMenuTable() {
   if (items.length === 0) {
     tbody.innerHTML = '';
     empty.classList.remove('hidden');
+    renderMenuPagination(0, 0);
     return;
   }
   empty.classList.add('hidden');
 
-  tbody.innerHTML = items.map(item => `
+  const totalPages = Math.ceil(items.length / MENU_PAGE_SIZE);
+  if (menuPage > totalPages) menuPage = totalPages;
+  const pageItems = items.slice((menuPage - 1) * MENU_PAGE_SIZE, menuPage * MENU_PAGE_SIZE);
+  renderMenuPagination(items.length, totalPages);
+
+  tbody.innerHTML = pageItems.map(item => `
     <tr data-id="${item.id}"${item.available === false ? ' style="opacity:0.6"' : ''}>
       <td>${item.image ? `<img class="item-thumb" src="/uploads/menu/${esc(item.image)}" alt="${esc(item.name)}">` : '<span class="item-thumb-empty">—</span>'}</td>
       <td><span class="badge badge--${esc(item.category)}">${esc(item.category)}</span></td>
-      <td${item.available === false ? ' style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(item.name)}</td>
+      <td${item.available === false ? ' style="text-decoration:line-through;color:var(--muted)"' : ''}>
+        ${esc(item.name)}
+        ${(item.dietary || []).map(d => `<span class="badge-dietary badge-dietary--${esc(d)}">${dietaryLabel(d)}</span>`).join('')}
+      </td>
       <td style="color:var(--muted)">${esc(item.description)}</td>
       <td style="color:var(--gold)">${esc(item.price)}</td>
       <td>
@@ -646,7 +655,7 @@ function renderMenuTable() {
       </td>
       <td>
         <div class="action-btns">
-          <button class="btn-edit" onclick="editMenuRow(${item.id})">Edit</button>
+          <button class="btn-edit" onclick="openMenuItemModal(${item.id})">Edit</button>
           <button class="btn-delete" onclick="deleteMenuItem(${item.id})">Delete</button>
         </div>
       </td>
@@ -654,73 +663,83 @@ function renderMenuTable() {
   `).join('');
 }
 
-function editMenuRow(id) {
-  const item = allMenuItems.find(i => i.id === id);
-  if (!item) return;
-  const menu = allMenus.find(m => m.id === currentMenuId);
-  const cats = menu ? menu.categories : [];
-  const tr   = document.querySelector(`#menuTbody tr[data-id="${id}"]`);
-  tr.classList.add('editing');
-  tr.innerHTML = `
-    <td>
-      <div class="edit-image-cell">
-        ${item.image ? `<img class="item-thumb" src="/uploads/menu/${esc(item.image)}" alt="${esc(item.name)}" id="editThumb-${id}">` : `<span class="item-thumb-empty" id="editThumb-${id}">—</span>`}
-        <label class="btn-ghost btn-sm edit-img-label">
-          Change
-          <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="edit-img-input" data-id="${id}" style="display:none" />
-        </label>
-        <input type="hidden" data-field="image" value="${esc(item.image || '')}" />
-      </div>
-    </td>
-    <td>
-      <select data-field="category">
-        ${cats.map(c => `<option value="${c}" ${item.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-      </select>
-    </td>
-    <td><input data-field="name" value="${esc(item.name)}" /></td>
-    <td><input data-field="description" value="${esc(item.description)}" /></td>
-    <td><input data-field="price" value="${esc(item.price)}" style="width:90px" /></td>
-    <td></td>
-    <td>
-      <div class="action-btns">
-        <button class="btn-save" onclick="saveMenuRow(${id})">Save</button>
-        <button class="btn-cancel" onclick="renderMenuTable()">Cancel</button>
-      </div>
-    </td>
+function renderMenuPagination(total, totalPages) {
+  const el = document.getElementById('menuPagination');
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <button class="page-btn" onclick="menuGoToPage(${menuPage - 1})" ${menuPage <= 1 ? 'disabled' : ''}>&#8592; Prev</button>
+    <span class="page-info">Page ${menuPage} of ${totalPages} <span class="page-total">(${total} items)</span></span>
+    <button class="page-btn" onclick="menuGoToPage(${menuPage + 1})" ${menuPage >= totalPages ? 'disabled' : ''}>Next &#8594;</button>
   `;
-
-  // Handle inline image replacement
-  tr.querySelector('.edit-img-input').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append('image', file);
-    const res = await fetch('/api/admin/upload/menu-image', { method: 'POST', body: fd });
-    if (!res.ok) return;
-    const { filename } = await res.json();
-    tr.querySelector('[data-field="image"]').value = filename;
-    const thumb = document.getElementById(`editThumb-${id}`);
-    if (thumb) {
-      const img = document.createElement('img');
-      img.className = 'item-thumb';
-      img.src = `/uploads/menu/${filename}`;
-      img.id  = `editThumb-${id}`;
-      thumb.replaceWith(img);
-    }
-  });
 }
 
-async function saveMenuRow(id) {
-  const tr      = document.querySelector(`#menuTbody tr[data-id="${id}"]`);
-  const fields  = tr.querySelectorAll('[data-field]');
-  const payload = {};
-  fields.forEach(f => payload[f.dataset.field] = f.value.trim());
-  const res = await fetch(`/api/admin/menus/${currentMenuId}/items/${id}`, {
-    method:  'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(payload)
-  });
-  if (res.ok) await loadMenuItems(currentMenuId);
+function menuGoToPage(page) {
+  menuPage = page;
+  renderMenuTable();
+}
+
+const DIETARY_LABELS = { gf: 'GF', v: 'V', vg: 'VG', spicy: '🌶', nuts: '⚠' };
+function dietaryLabel(key) { return DIETARY_LABELS[key] || key; }
+
+function openMenuItemModal(id = null) {
+  const modal   = document.getElementById('menuItemModal');
+  const title   = document.getElementById('menuItemModalTitle');
+  const saveBtn = document.getElementById('menuItemModalSaveBtn');
+  const errEl   = document.getElementById('menuItemModalError');
+
+  // Populate category select
+  const menu = allMenus.find(m => m.id === currentMenuId);
+  const cats = menu ? (menu.categories || []) : [];
+  const catSel = document.getElementById('modalItemCategory');
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  catSel.innerHTML = cats.length
+    ? cats.map(c => `<option value="${esc(c)}">${esc(cap(c))}</option>`).join('')
+    : '<option value="" disabled selected>Add a category first</option>';
+
+  // Reset form state
+  document.getElementById('menuItemForm').reset();
+  document.getElementById('modalItemId').value   = '';
+  document.getElementById('modalItemImageValue').value = '';
+  document.getElementById('modalImagePreview').innerHTML = '';
+  document.querySelectorAll('.dietary-cb').forEach(cb => cb.checked = false);
+  document.getElementById('modalItemAvailable').checked = true;
+  errEl.textContent = '';
+  errEl.classList.add('hidden');
+
+  if (id === null) {
+    title.textContent    = 'Add Menu Item';
+    saveBtn.textContent  = 'Add Item';
+  } else {
+    const item = allMenuItems.find(i => i.id === id);
+    if (!item) return;
+    title.textContent   = 'Edit Menu Item';
+    saveBtn.textContent = 'Save Changes';
+    document.getElementById('modalItemId').value          = id;
+    catSel.value = item.category;
+    document.getElementById('modalItemName').value        = item.name || '';
+    document.getElementById('modalItemPrice').value       = item.price || '';
+    document.getElementById('modalItemDescription').value = item.description || '';
+    document.getElementById('modalItemAvailable').checked = item.available !== false;
+    if (item.image) {
+      document.getElementById('modalItemImageValue').value = item.image;
+      document.getElementById('modalImagePreview').innerHTML =
+        `<img src="/uploads/menu/${esc(item.image)}" alt="${esc(item.name)}" />`;
+    }
+    (item.dietary || []).forEach(d => {
+      const cb = document.querySelector(`.dietary-cb[value="${d}"]`);
+      if (cb) cb.checked = true;
+    });
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeMenuItemModal() {
+  document.getElementById('menuItemModal').classList.add('hidden');
+  document.getElementById('menuItemForm').reset();
+  document.getElementById('modalItemImageValue').value = '';
+  document.getElementById('modalImagePreview').innerHTML = '';
 }
 
 async function deleteMenuItem(id) {
@@ -834,28 +853,21 @@ async function removeCategory(catName) {
   });
   if (res.ok) {
     menu.categories = updated;
-    if (activeCat === catName) activeCat = 'all';
     renderCategoryBar(menu);
-    renderMenuTable();
   }
 }
 
-// ── Add item form ─────────────────────────────
+// ── Menu item modal ───────────────────────────
 
-document.getElementById('addItemBtn').addEventListener('click', () => {
-  document.getElementById('addItemForm').classList.remove('hidden');
-  document.getElementById('addItemBtn').classList.add('hidden');
+document.getElementById('addItemBtn').addEventListener('click', () => openMenuItemModal());
+
+document.getElementById('menuItemModalCancelBtn').addEventListener('click', closeMenuItemModal);
+
+document.getElementById('menuItemModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('menuItemModal')) closeMenuItemModal();
 });
 
-document.getElementById('cancelAddBtn').addEventListener('click', () => {
-  document.getElementById('addItemForm').classList.add('hidden');
-  document.getElementById('addItemBtn').classList.remove('hidden');
-  document.getElementById('addItemForm').reset();
-  document.getElementById('imagePreview').innerHTML = '';
-  document.getElementById('addItemImageValue').value = '';
-});
-
-document.getElementById('addItemImage').addEventListener('change', async (e) => {
+document.getElementById('modalItemImage').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const fd = new FormData();
@@ -863,31 +875,46 @@ document.getElementById('addItemImage').addEventListener('change', async (e) => 
   const res = await fetch('/api/admin/upload/menu-image', { method: 'POST', body: fd });
   if (!res.ok) { e.target.value = ''; return; }
   const { filename } = await res.json();
-  document.getElementById('addItemImageValue').value = filename;
-  const preview = document.getElementById('imagePreview');
-  preview.innerHTML = `<img src="/uploads/menu/${filename}" alt="preview" />`;
+  document.getElementById('modalItemImageValue').value = filename;
+  document.getElementById('modalImagePreview').innerHTML =
+    `<img src="/uploads/menu/${filename}" alt="preview" />`;
 });
 
-document.getElementById('addItemForm').addEventListener('submit', async (e) => {
+document.getElementById('menuItemForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const fd      = new FormData(e.target);
-  const payload = Object.fromEntries(fd);
-  if (!payload.image) delete payload.image; // omit if no image was uploaded
-  const res = await fetch(`/api/admin/menus/${currentMenuId}/items`, {
-    method:  'POST',
+  const id       = document.getElementById('modalItemId').value;
+  const isEdit   = id !== '';
+  const errEl    = document.getElementById('menuItemModalError');
+  const dietary  = [...document.querySelectorAll('.dietary-cb:checked')].map(cb => cb.value);
+  const payload  = {
+    category:    document.getElementById('modalItemCategory').value,
+    name:        document.getElementById('modalItemName').value.trim(),
+    price:       document.getElementById('modalItemPrice').value.trim(),
+    description: document.getElementById('modalItemDescription').value.trim(),
+    available:   document.getElementById('modalItemAvailable').checked,
+    dietary
+  };
+  const imgVal = document.getElementById('modalItemImageValue').value;
+  if (imgVal) payload.image = imgVal;
+
+  const url    = isEdit
+    ? `/api/admin/menus/${currentMenuId}/items/${id}`
+    : `/api/admin/menus/${currentMenuId}/items`;
+  const method = isEdit ? 'PUT' : 'POST';
+
+  const res = await fetch(url, {
+    method,
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(payload)
   });
+
   if (res.ok) {
-    e.target.reset();
-    document.getElementById('addItemForm').classList.add('hidden');
-    document.getElementById('addItemBtn').classList.remove('hidden');
-    document.getElementById('imagePreview').innerHTML = '';
-    document.getElementById('addItemImageValue').value = '';
-    // Re-populate category select after reset
-    const menu = allMenus.find(m => m.id === currentMenuId);
-    if (menu) renderCategoryBar(menu);
+    closeMenuItemModal();
     await loadMenuItems(currentMenuId);
+  } else {
+    const data = await res.json().catch(() => ({}));
+    errEl.textContent = data.error || 'Something went wrong.';
+    errEl.classList.remove('hidden');
   }
 });
 
@@ -902,18 +929,11 @@ document.querySelector('#panel-menu .data-table thead').addEventListener('click'
     menuSortCol = col;
     menuSortDir = 'asc';
   }
+  menuPage = 1;
   renderMenuTable();
 });
 
-// Category filter tabs (event delegation)
-document.getElementById('catTabs').addEventListener('click', (e) => {
-  const btn = e.target.closest('.cat-tab');
-  if (!btn) return;
-  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  activeCat = btn.dataset.cat;
-  renderMenuTable();
-});
+// (Category filter tabs removed — use table column sort instead)
 
 // Menu selector pills (event delegation)
 document.getElementById('menuSelector').addEventListener('click', (e) => {
@@ -934,20 +954,50 @@ document.getElementById('setLiveBtn').addEventListener('click', activateCurrentM
 // Delete menu
 document.getElementById('deleteMenuBtn').addEventListener('click', deleteCurrentMenu);
 
-// Add category
-document.getElementById('addCatBtn').addEventListener('click', () => {
-  const input = document.getElementById('newCatInput');
-  addCategory(input.value);
-  input.value = '';
+// Edit menu modal
+function openEditMenuModal() {
+  const menu = allMenus.find(m => m.id === currentMenuId);
+  if (!menu) return;
+  document.getElementById('editMenuNameInput').value = menu.name || '';
+  renderEditMenuCategories(menu);
+  document.getElementById('editMenuModal').classList.remove('hidden');
+}
+
+function closeEditMenuModal() {
+  document.getElementById('editMenuModal').classList.add('hidden');
+  document.getElementById('editMenuNewCatInput').value = '';
+}
+
+document.getElementById('editMenuBtn').addEventListener('click', openEditMenuModal);
+document.getElementById('editMenuModalCloseBtn').addEventListener('click', closeEditMenuModal);
+document.getElementById('editMenuModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('editMenuModal')) closeEditMenuModal();
 });
 
-document.getElementById('newCatInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const input = document.getElementById('newCatInput');
-    addCategory(input.value);
-    input.value = '';
+document.getElementById('editMenuNameSaveBtn').addEventListener('click', async () => {
+  const name = document.getElementById('editMenuNameInput').value.trim();
+  if (!name) return;
+  const res = await fetch(`/api/admin/menus/${currentMenuId}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ name })
+  });
+  if (res.ok) {
+    const menu = allMenus.find(m => m.id === currentMenuId);
+    if (menu) menu.name = name;
+    renderMenuSelector();
   }
+});
+
+function editMenuAddCategory() {
+  const input = document.getElementById('editMenuNewCatInput');
+  addCategory(input.value);
+  input.value = '';
+}
+
+document.getElementById('editMenuAddCatBtn').addEventListener('click', editMenuAddCategory);
+document.getElementById('editMenuNewCatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); editMenuAddCategory(); }
 });
 
 // ── HOURS ─────────────────────────────────────
@@ -1055,18 +1105,30 @@ async function saveNewHoursRow(btn) {
 async function loadSettings() {
   const res  = await fetch('/api/admin/settings');
   const data = await res.json();
-  document.getElementById('s-address').value = data.address || '';
-  document.getElementById('s-phone').value   = data.phone   || '';
-  document.getElementById('s-email').value   = data.email   || '';
+  document.getElementById('s-address').value       = data.address    || '';
+  document.getElementById('s-phone').value         = data.phone      || '';
+  document.getElementById('s-email').value         = data.email      || '';
+  document.getElementById('b-enabled').checked     = !!data.banner_enabled;
+  document.getElementById('b-dismissable').checked = data.banner_dismissable !== false; // default true
+  document.getElementById('b-text').value          = data.banner_text || '';
+  document.getElementById('b-type').value          = data.banner_type || 'info';
 }
 
 document.getElementById('settingsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const fd  = new FormData(e.target);
+  const payload = {
+    address:            document.getElementById('s-address').value.trim(),
+    phone:              document.getElementById('s-phone').value.trim(),
+    email:              document.getElementById('s-email').value.trim(),
+    banner_enabled:     document.getElementById('b-enabled').checked,
+    banner_dismissable: document.getElementById('b-dismissable').checked,
+    banner_text:        document.getElementById('b-text').value.trim(),
+    banner_type:        document.getElementById('b-type').value
+  };
   const res = await fetch('/api/admin/settings', {
     method:  'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(Object.fromEntries(fd))
+    body:    JSON.stringify(payload)
   });
   const msg = document.getElementById('settingsMsg');
   if (res.ok) {

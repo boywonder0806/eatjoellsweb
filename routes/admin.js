@@ -358,12 +358,12 @@ router.get('/settings', requirePermission('settings', 'view'), (req, res) => {
 // PUT /api/admin/settings
 router.put('/settings', requirePermission('settings', 'full'), (req, res) => {
   const data    = readData();
-  const allowed = ['address', 'phone', 'email'];
+  const allowed = ['address', 'phone', 'email', 'banner_enabled', 'banner_dismissable', 'banner_text', 'banner_type'];
   allowed.forEach(key => {
     if (req.body[key] !== undefined) data.settings[key] = req.body[key];
   });
   writeData(data);
-  addLog(req, 'settings.update', `Updated contact settings`);
+  addLog(req, 'settings.update', `Updated site settings`);
   res.json(data.settings);
 });
 
