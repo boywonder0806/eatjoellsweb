@@ -818,6 +818,25 @@
   </main>
   </div>
 
+  <!-- ── New Menu Modal ──────────────────────────── -->
+  <div class="modal-overlay hidden" id="newMenuModal">
+    <div class="modal-card">
+      <h2 class="modal-title">Create New Menu</h2>
+      <p class="modal-sub">Give your new menu a name. You can add categories and items after it's created.</p>
+      <form class="modal-form" id="newMenuForm">
+        <div class="field">
+          <label>Menu Name</label>
+          <input type="text" id="newMenuNameInput" placeholder="e.g. Lunch Menu" required />
+        </div>
+        <p class="modal-error hidden" id="newMenuError"></p>
+        <div class="modal-actions">
+          <button type="submit" class="btn-gold">Create Menu</button>
+          <button type="button" class="btn-ghost" id="newMenuCancelBtn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ── Change Password Modal ─────────────────── -->
   <div class="modal-overlay hidden" id="changePwModal">
     <div class="modal-card">

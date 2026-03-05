@@ -123,16 +123,19 @@ router.post('/logout', (req, res) => {
 
 // GET /api/admin/check
 router.get('/check', requireAuth, (req, res) => {
-  let permissions = null; // null = admin = full access everywhere
+  let permissions   = null; // null = admin = full access everywhere
+  let isSystemAdmin = false;
   if (req.session.role !== 'admin') {
     const data    = readData();
     const roleObj = (data.roles || []).find(r => r.name === req.session.role);
     permissions   = roleObj?.permissions ?? {};
+    isSystemAdmin = !!roleObj?.isSystemAdmin;
   }
   res.json({
     ok:                true,
     username:          req.session.username,
     role:              req.session.role,
+    isSystemAdmin,
     mustChangePassword: req.session.mustChangePassword,
     permissions
   });
@@ -259,7 +262,7 @@ router.get('/menus/:menuId/items', requirePermission('menu', 'view'), (req, res)
 // POST /api/admin/menus/:menuId/items
 router.post('/menus/:menuId/items', requirePermission('menu', 'full'), (req, res) => {
   const menuId = parseInt(req.params.menuId, 10);
-  const { category, name, description, price, image } = req.body;
+  const { category, name, description, price, image, available, dietary } = req.body;
   if (!category || !name || !price) return res.status(400).json({ error: 'category, name and price are required' });
   const data = readData();
   const menu = data.menus.find(m => m.id === menuId);
@@ -272,6 +275,8 @@ router.post('/menus/:menuId/items', requirePermission('menu', 'full'), (req, res
     name,
     description: description || '',
     price,
+    available:   available !== false,
+    dietary:     Array.isArray(dietary) ? dietary : [],
     sort_order:  catItems.length
   };
   if (image) newItem.image = image;

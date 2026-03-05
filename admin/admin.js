@@ -234,7 +234,7 @@ function updateDashboardStatus(now) {
 // ── Role gating ──────────────────────────────
 function applyRoleGating(data) {
   const PANELS  = ['menu', 'hours', 'settings', 'about', 'messages', 'events', 'users', 'roles', 'security'];
-  const isAdmin = data.role === 'admin';
+  const isAdmin = data.role === 'admin' || !!data.isSystemAdmin;
   const perms   = data.permissions; // null = admin
 
   PANELS.forEach(panel => {
@@ -732,7 +732,7 @@ async function selectMenu(id) {
   currentMenuId = id;
   renderMenuSelector();
   const menu    = allMenus.find(m => m.id === id);
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || !!currentUser?.isSystemAdmin;
   const editMenuBtn   = document.getElementById('editMenuBtn');
   const setLiveBtn    = document.getElementById('setLiveBtn');
   const deleteMenuBtn = document.getElementById('deleteMenuBtn');
@@ -761,7 +761,7 @@ function renderEditMenuCategories(menu) {
   const el      = document.getElementById('editMenuCategories');
   if (!el) return;
   const cats    = menu ? (menu.categories || []) : [];
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || !!currentUser?.isSystemAdmin;
   const cap     = s => s.charAt(0).toUpperCase() + s.slice(1);
   el.innerHTML  = cats.length
     ? cats.map(cat => `
@@ -1129,10 +1129,36 @@ document.getElementById('menuSelector').addEventListener('click', (e) => {
   selectMenu(parseInt(pill.dataset.menuId, 10));
 });
 
-// New menu
-document.getElementById('addMenuBtn').addEventListener('click', () => {
-  const name = prompt('Enter a name for the new menu:');
-  if (name && name.trim()) createMenu(name.trim());
+// New menu modal
+function openNewMenuModal() {
+  document.getElementById('newMenuNameInput').value = '';
+  document.getElementById('newMenuError').textContent = '';
+  document.getElementById('newMenuError').classList.add('hidden');
+  document.getElementById('newMenuModal').classList.remove('hidden');
+  document.getElementById('newMenuNameInput').focus();
+}
+function closeNewMenuModal() {
+  document.getElementById('newMenuModal').classList.add('hidden');
+}
+
+document.getElementById('addMenuBtn').addEventListener('click', openNewMenuModal);
+document.getElementById('newMenuCancelBtn').addEventListener('click', closeNewMenuModal);
+document.getElementById('newMenuModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('newMenuModal')) closeNewMenuModal();
+});
+document.getElementById('newMenuForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name  = document.getElementById('newMenuNameInput').value.trim();
+  const errEl = document.getElementById('newMenuError');
+  if (!name) return;
+  const duplicate = allMenus.some(m => m.name.toLowerCase() === name.toLowerCase());
+  if (duplicate) {
+    errEl.textContent = 'A menu with that name already exists.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  closeNewMenuModal();
+  createMenu(name);
 });
 
 // Set as Live
